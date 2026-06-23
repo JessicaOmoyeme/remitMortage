@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { validateBorrowerParams } from "../middleware/validate.js";
 
 export const borrowerRouter = Router();
 
@@ -33,7 +34,7 @@ export const borrowerRouter = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-borrowerRouter.get("/:address/status", async (req, res) => {
+borrowerRouter.get("/:address/status", validateBorrowerParams, async (req, res) => {
   try {
     const { address } = req.params;
 
