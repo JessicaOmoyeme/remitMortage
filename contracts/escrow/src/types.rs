@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address};
+use soroban_sdk::{contracttype, Address, BytesN};
 
 /// Configuration set during contract initialization.
 #[contracttype]
@@ -36,6 +36,16 @@ pub struct BorrowerRecord {
     pub withdrawn: bool,
 }
 
+/// Pending upgrade proposal (used when upgrade_delay_ledgers > 0).
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingUpgradeRecord {
+    /// The WASM hash queued for deployment.
+    pub new_wasm_hash: BytesN<32>,
+    /// The ledger sequence after which this upgrade may execute.
+    pub execute_after: u32,
+}
+
 /// Storage keys for the escrow contract.
 #[contracttype]
 #[derive(Clone)]
@@ -46,4 +56,10 @@ pub enum DataKey {
     Borrower(Address),
     /// Total pooled balance across all borrowers.
     TotalPooled,
+    /// Current contract version (incremented on each upgrade).
+    Version,
+    /// Pending upgrade proposal (present only when a timelock delay is active).
+    PendingUpgrade,
+    /// Number of ledgers the admin must wait between proposing and executing an upgrade.
+    UpgradeDelay,
 }

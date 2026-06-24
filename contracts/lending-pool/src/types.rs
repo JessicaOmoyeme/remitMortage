@@ -1,5 +1,15 @@
 use soroban_sdk::{contracttype, Address, BytesN};
 
+/// Pending upgrade proposal (used when upgrade_delay_ledgers > 0).
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingUpgradeRecord {
+    /// The WASM hash queued for deployment.
+    pub new_wasm_hash: BytesN<32>,
+    /// The ledger sequence after which this upgrade may execute.
+    pub execute_after: u32,
+}
+
 /// Pool configuration set during initialization.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -100,4 +110,10 @@ pub enum DataKey {
     ActiveLoanCommitments,
     /// Sum of all investor deposits minus withdrawals.
     TotalDeposited,
+    /// Current contract version (incremented on each upgrade).
+    Version,
+    /// Pending upgrade proposal (present only when a timelock delay is active).
+    PendingUpgrade,
+    /// Number of ledgers the admin must wait between proposing and executing an upgrade.
+    UpgradeDelay,
 }

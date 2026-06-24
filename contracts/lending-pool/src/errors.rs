@@ -24,4 +24,8 @@ pub enum PoolError {
     InsufficientLiquidity = 9,
     /// Repayment exceeds remaining loan balance.
     OverPayment = 10,
+    /// No pending upgrade exists to execute.
+    UpgradeNotPending = 11,
+    /// Upgrade was proposed but the timelock delay has not elapsed yet.
+    UpgradeTimelockActive = 12,
 }

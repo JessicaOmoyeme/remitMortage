@@ -38,7 +38,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 500000000000
+                    "lo": 1000000000000
                   }
                 }
               ]
@@ -65,25 +65,7 @@
                   "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
                 },
                 {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 100000000000
-                  }
-                },
-                {
-                  "u32": 518400
-                },
-                {
-                  "u32": 500
-                },
-                {
-                  "u32": 300
-                },
-                {
-                  "u32": 150
-                },
-                {
-                  "u32": 50
+                  "u32": 800
                 }
               ]
             }
@@ -107,7 +89,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 50000000000
+                    "lo": 500000000000
                   }
                 }
               ]
@@ -129,7 +111,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 50000000000
+                        "lo": 500000000000
                       }
                     }
                   ]
@@ -152,6 +134,12 @@
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 200000000000
+                  }
                 }
               ]
             }
@@ -160,6 +148,8 @@
         }
       ]
     ],
+    [],
+    [],
     []
   ],
   "ledger": {
@@ -372,7 +362,7 @@
             "key": {
               "vec": [
                 {
-                  "symbol": "Borrower"
+                  "symbol": "Investor"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -392,7 +382,7 @@
                 "key": {
                   "vec": [
                     {
-                      "symbol": "Borrower"
+                      "symbol": "Investor"
                     },
                     {
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -404,7 +394,7 @@
                   "map": [
                     {
                       "key": {
-                        "symbol": "deposited"
+                        "symbol": "claimed_yield"
                       },
                       "val": {
                         "i128": {
@@ -415,10 +405,13 @@
                     },
                     {
                       "key": {
-                        "symbol": "released"
+                        "symbol": "deposited"
                       },
                       "val": {
-                        "bool": false
+                        "i128": {
+                          "hi": 0,
+                          "lo": 300000000000
+                        }
                       }
                     },
                     {
@@ -427,14 +420,6 @@
                       },
                       "val": {
                         "u32": 0
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "withdrawn"
-                      },
-                      "val": {
-                        "bool": true
                       }
                     }
                   ]
@@ -473,6 +458,21 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "ActiveLoanCommitments"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 0
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Config"
                             }
                           ]
@@ -489,53 +489,10 @@
                             },
                             {
                               "key": {
-                                "symbol": "max_duration_ledgers"
+                                "symbol": "interest_rate_bps"
                               },
                               "val": {
-                                "u32": 518400
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "penalty_bps_tier1"
-                              },
-                              "val": {
-                                "u32": 500
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "penalty_bps_tier2"
-                              },
-                              "val": {
-                                "u32": 300
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "penalty_bps_tier3"
-                              },
-                              "val": {
-                                "u32": 150
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "penalty_bps_tier4"
-                              },
-                              "val": {
-                                "u32": 50
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "savings_target"
-                              },
-                              "val": {
-                                "i128": {
-                                  "hi": 0,
-                                  "lo": 100000000000
-                                }
+                                "u32": 800
                               }
                             },
                             {
@@ -553,7 +510,49 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "TotalPooled"
+                              "symbol": "LoanCount"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 0
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "TotalDeposited"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 300000000000
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "TotalLiquidity"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 300000000000
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "TotalRepaidInterest"
                             }
                           ]
                         },
@@ -630,7 +629,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 497500000000
+                          "lo": 700000000000
                         }
                       }
                     },
@@ -703,7 +702,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 2500000000
+                          "lo": 300000000000
                         }
                       }
                     },

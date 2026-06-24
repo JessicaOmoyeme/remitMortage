@@ -22,4 +22,8 @@ pub enum EscrowError {
     PeriodExpired = 8,
     /// Borrower record not found.
     BorrowerNotFound = 9,
+    /// No pending upgrade exists to execute.
+    UpgradeNotPending = 10,
+    /// Upgrade was proposed but the timelock delay has not elapsed yet.
+    UpgradeTimelockActive = 11,
 }
