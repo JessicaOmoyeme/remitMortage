@@ -4,11 +4,18 @@ mod errors;
 mod types;
 
 use crate::errors::PoolError;
-use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PoolConfig};
+use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PoolConfig, RepaymentSchedule};
 use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env};
 
 const INSTANCE_BUMP_AMOUNT: u32 = 518_400; // ~30 days
 const INSTANCE_LIFETIME_THRESHOLD: u32 = 129_600; // ~7.5 days
+
+// Ledger durations used for repayment scheduling
+const LEDGERS_PER_MONTH: u32 = 518_400; // ~30 days
+const GRACE_PERIOD_LEDGERS: u32 = 120_960; // ~7 days
+const LATE_PENALTY_BPS: u32 = 50; // 50 bps = 0.5%
+const DEFAULT_DURATION_MONTHS: u32 = 12;
+const DEFAULT_MISSED_THRESHOLD: u32 = 3; // default after 3 missed payments
 
 /// Lending Pool Contract
 ///
@@ -221,8 +228,29 @@ impl LendingPoolContract {
             return Err(PoolError::InsufficientLiquidity);
         }
 
+        // Transition to approved and generate a repayment schedule.
+        // Calculate simple interest and distribute over default duration.
+        let interest = (loan.principal * loan.interest_rate_bps as i128) / 10_000;
+        let total_owed = loan.principal + interest;
+        let duration_months = DEFAULT_DURATION_MONTHS;
+        let monthly_amount = total_owed / (duration_months as i128);
+        let next_due = env.ledger().sequence() + LEDGERS_PER_MONTH;
+
         loan.status = LoanStatus::Approved;
+
+        let schedule = RepaymentSchedule {
+            monthly_amount,
+            duration_months,
+            next_due_ledger: next_due,
+            payments_made: 0u32,
+            payments_missed: 0u32,
+        };
+
+        // Persist loan and schedule separately
         Self::set_loan(&env, &loan_id, &loan);
+        env.storage()
+            .persistent()
+            .set(&DataKey::LoanSchedule(loan_id.clone()), &schedule);
 
         env.storage()
             .instance()
@@ -318,6 +346,57 @@ impl LendingPoolContract {
             return Err(PoolError::OverPayment);
         }
 
+        // If schedule exists, enforce installment logic (due dates, grace, penalties)
+        if env.storage().persistent().has(&DataKey::LoanSchedule(loan_id.clone())) {
+            let mut sched: RepaymentSchedule = env.storage().persistent().get(&DataKey::LoanSchedule(loan_id.clone())).unwrap();
+            let current_ledger = env.ledger().sequence();
+
+            // If payment is on-time or within grace period
+            if current_ledger <= sched.next_due_ledger + GRACE_PERIOD_LEDGERS {
+                // Accept payment. If it covers at least monthly_amount, count as on-time.
+                if amount >= sched.monthly_amount {
+                    sched.payments_made += 1u32;
+                    sched.payments_missed = 0u32; // reset consecutive misses
+                    sched.next_due_ledger = sched.next_due_ledger + LEDGERS_PER_MONTH;
+                } else {
+                    // partial payment within period: accept but do not advance schedule
+                }
+            } else {
+                // Payment after grace period -> late.
+                // Determine how many monthly periods have been missed up to now.
+                let mut missed_periods: u32 = 1u32;
+                if current_ledger > sched.next_due_ledger {
+                    let diff = current_ledger - sched.next_due_ledger;
+                    missed_periods = 1u32 + (diff / LEDGERS_PER_MONTH);
+                }
+
+                // Increase missed count by number of missed periods (consecutive)
+                sched.payments_missed = sched.payments_missed.saturating_add(missed_periods);
+
+                // Calculate penalty for overdue installment (50 bps of monthly_amount)
+                let penalty = (sched.monthly_amount * LATE_PENALTY_BPS as i128) / 10_000;
+                let required = sched.monthly_amount + penalty;
+
+                if amount < required {
+                    // enforce penalty-inclusive payment for late payments
+                    return Err(PoolError::InvalidAmount);
+                }
+
+                // Treat this payment as covering the current installment and advance next_due accordingly
+                sched.payments_made += 1u32;
+                // Advance next_due by missed_periods + 1 months (we cover current and skipped installments)
+                sched.next_due_ledger = sched.next_due_ledger + ((missed_periods + 1) * LEDGERS_PER_MONTH);
+
+                // If missed threshold reached, mark Defaulted
+                if sched.payments_missed >= DEFAULT_MISSED_THRESHOLD {
+                    loan.status = LoanStatus::Defaulted;
+                }
+            }
+
+            // Persist schedule changes back to storage
+            env.storage().persistent().set(&DataKey::LoanSchedule(loan_id.clone()), &sched);
+        }
+
         // Transfer USDC from borrower to pool.
         let token = Self::token_client(&env, &config.token);
         token.transfer(&borrower, &env.current_contract_address(), &amount);
@@ -364,6 +443,16 @@ impl LendingPoolContract {
     /// Returns a loan record by ID.
     pub fn get_loan_info(env: Env, loan_id: BytesN<32>) -> Result<LoanRecord, PoolError> {
         Self::read_loan(&env, &loan_id)
+    }
+
+    /// Returns repayment schedule for a loan (if one exists).
+    pub fn get_repayment_schedule(env: Env, loan_id: BytesN<32>) -> Result<Option<RepaymentSchedule>, PoolError> {
+        if env.storage().persistent().has(&DataKey::LoanSchedule(loan_id.clone())) {
+            let sched: RepaymentSchedule = env.storage().persistent().get(&DataKey::LoanSchedule(loan_id.clone())).unwrap();
+            Ok(Some(sched))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Returns the contract version.

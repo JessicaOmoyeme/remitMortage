@@ -35,8 +35,26 @@ pub enum LoanStatus {
     Repaid = 2,
     /// Loan was rejected or cancelled.
     Cancelled = 3,
+    /// Loan has defaulted after missed payments.
+    Defaulted = 4,
 }
-
+ 
+/// Repayment schedule for a loan, tracked on-chain.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct RepaymentSchedule {
+    /// Monthly installment amount (principal + interest portion for the term).
+    pub monthly_amount: i128,
+    /// Duration of the schedule in months.
+    pub duration_months: u32,
+    /// Ledger sequence when the next installment is due.
+    pub next_due_ledger: u32,
+    /// Count of installments paid on-time.
+    pub payments_made: u32,
+    /// Count of installments missed (consecutive misses are used for default detection).
+    pub payments_missed: u32,
+}
+ 
 /// A loan record for a borrower.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -55,6 +73,7 @@ pub struct LoanRecord {
     pub status: LoanStatus,
     /// Ledger when the loan was created.
     pub created_ledger: u32,
+    // schedule moved to separate storage key (LoanSchedule) to avoid optional contracttype encoding issues
 }
 
 /// Storage keys for the lending pool contract.
@@ -69,6 +88,8 @@ pub enum DataKey {
     TotalLiquidity,
     /// Loan record keyed by a unique loan ID (hash).
     Loan(BytesN<32>),
+    /// Repayment schedule keyed by loan ID.
+    LoanSchedule(BytesN<32>),
     /// Total number of active loans (for tracking).
     LoanCount,
 }
