@@ -11,7 +11,13 @@ use soroban_sdk::{contract, contractimpl, symbol_short, Address, BytesN, Env, In
 
 const INSTANCE_BUMP_AMOUNT: u32 = 518_400; // ~30 days
 const INSTANCE_LIFETIME_THRESHOLD: u32 = 129_600; // ~7.5 days
-const LEDGERS_PER_MONTH: u32 = 518_400; // used to approximate months from ledger sequence
+
+// Use a small constant in tests so ledger advances stay well within instance TTL.
+#[cfg(not(test))]
+const LEDGERS_PER_MONTH: u32 = 518_400; // ~30 days in production
+
+#[cfg(test)]
+const LEDGERS_PER_MONTH: u32 = 100; // compact constant for unit tests
 
 /// Escrow Contract
 ///
@@ -41,7 +47,23 @@ impl EscrowContract {
                 start_ledger: 0,
                 released: false,
                 withdrawn: false,
+                last_contribution_ledger: 0,
             })
+    }
+
+    /// Returns true if the borrower has missed their monthly contribution and
+    /// the grace period has expired.
+    fn is_defaulting(record: &BorrowerRecord, config: &EscrowConfig, current_ledger: u32) -> bool {
+        if record.deposited == 0 || record.released || record.withdrawn {
+            return false;
+        }
+        let threshold = LEDGERS_PER_MONTH + config.grace_period_ledgers;
+        let last = if record.last_contribution_ledger > 0 {
+            record.last_contribution_ledger
+        } else {
+            record.start_ledger
+        };
+        current_ledger > last && (current_ledger - last) > threshold
     }
 
     /// Write a borrower's record to persistent storage.
@@ -80,6 +102,8 @@ impl EscrowContract {
         penalty_bps_tier2: u32,
         penalty_bps_tier3: u32,
         penalty_bps_tier4: u32,
+        grace_period_ledgers: u32,
+        default_penalty_bps: u32,
     ) -> Result<(), EscrowError> {
         // Prevent re-initialization.
         if env.storage().instance().has(&DataKey::Config) {
@@ -102,6 +126,8 @@ impl EscrowContract {
             penalty_bps_tier2,
             penalty_bps_tier3,
             penalty_bps_tier4,
+            grace_period_ledgers,
+            default_penalty_bps,
         };
 
         env.storage().instance().set(&DataKey::Config, &config);
@@ -141,11 +167,15 @@ impl EscrowContract {
         let token = get_token_client(&env, &config.token);
         token.transfer(&borrower, &env.current_contract_address(), &amount);
 
+        let current_ledger = env.ledger().sequence();
+
         // Set start ledger on first deposit.
         if record.deposited == 0 {
-            record.start_ledger = env.ledger().sequence();
+            record.start_ledger = current_ledger;
         }
 
+        // Always update last contribution ledger so the default timer resets.
+        record.last_contribution_ledger = current_ledger;
         record.deposited += amount;
         Self::set_borrower(&env, &borrower, &record);
 
@@ -289,6 +319,69 @@ impl EscrowContract {
         );
 
         Ok(amount)
+    }
+
+    /// Force-remove a borrower who has missed their monthly contribution and
+    /// whose 7-day grace period has expired.
+    ///
+    /// The borrower receives their deposited balance minus `default_penalty_bps`.
+    /// The penalty stays in the contract. Admin-only.
+    pub fn remove_defaulter(env: Env, borrower: Address) -> Result<i128, EscrowError> {
+        let config = Self::get_config(&env)?;
+        config.admin.require_auth();
+
+        let mut record = Self::get_borrower(&env, &borrower);
+
+        if record.deposited == 0 {
+            return Err(EscrowError::BorrowerNotFound);
+        }
+        if record.released {
+            return Err(EscrowError::AlreadyReleased);
+        }
+        if record.withdrawn {
+            return Err(EscrowError::AlreadyWithdrawn);
+        }
+
+        let current_ledger = env.ledger().sequence();
+
+        if !Self::is_defaulting(&record, &config, current_ledger) {
+            // Determine whether they are in default but grace period is still active,
+            // or simply not in default at all.
+            let last = if record.last_contribution_ledger > 0 {
+                record.last_contribution_ledger
+            } else {
+                record.start_ledger
+            };
+            let elapsed = if current_ledger > last { current_ledger - last } else { 0 };
+            if elapsed > LEDGERS_PER_MONTH {
+                return Err(EscrowError::GracePeriodActive);
+            }
+            return Err(EscrowError::BorrowerNotInDefault);
+        }
+
+        let penalty = (record.deposited * config.default_penalty_bps as i128) / 10_000;
+        let refund = record.deposited - penalty;
+
+        let token = get_token_client(&env, &config.token);
+        token.transfer(&env.current_contract_address(), &borrower, &refund);
+
+        let total = Self::read_total_pooled(&env) - record.deposited;
+        env.storage().instance().set(&DataKey::TotalPooled, &total);
+
+        record.withdrawn = true;
+        record.deposited = 0;
+        Self::set_borrower(&env, &borrower, &record);
+
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        env.events().publish(
+            (symbol_short!("rm_dflt"),),
+            (borrower.clone(), refund, penalty),
+        );
+
+        Ok(refund)
     }
 
     // ── Query Functions ──────────────────────────────────────────────────
@@ -529,10 +622,12 @@ mod test {
             &token_address,
             &10_000_0000000i128, // 10,000 USDC target
             &518_400u32,
-            &500u32, // tier1: months 1-2 -> 5%
-            &300u32, // tier2: months 3-4 -> 3%
-            &150u32, // tier3: months 5-6 -> 1.5%
-            &50u32,  // tier4: month 7+ -> 0.5%
+            &500u32,  // tier1: months 1-2 -> 5%
+            &300u32,  // tier2: months 3-4 -> 3%
+            &150u32,  // tier3: months 5-6 -> 1.5%
+            &50u32,   // tier4: month 7+ -> 0.5%
+            &10u32,   // grace period: 10 ledgers (small for tests)
+            &1000u32, // default penalty: 10%
         );
 
         (admin, borrower, token_address, client)
@@ -558,6 +653,8 @@ mod test {
             &300u32,
             &150u32,
             &50u32,
+            &120_960u32,
+            &1000u32,
         );
 
         // Verify config was stored by reading from the contract's context.
@@ -576,6 +673,8 @@ mod test {
             assert_eq!(stored_config.penalty_bps_tier2, 300u32);
             assert_eq!(stored_config.penalty_bps_tier3, 150u32);
             assert_eq!(stored_config.penalty_bps_tier4, 50u32);
+            assert_eq!(stored_config.grace_period_ledgers, 120_960u32);
+            assert_eq!(stored_config.default_penalty_bps, 1000u32);
         });
     }
 
@@ -590,9 +689,9 @@ mod test {
         let admin = Address::generate(&env);
         let token = Address::generate(&env);
 
-        client.initialize(&admin, &token, &10_000_0000000i128, &518_400u32, &500u32, &300u32, &150u32, &50u32);
+        client.initialize(&admin, &token, &10_000_0000000i128, &518_400u32, &500u32, &300u32, &150u32, &50u32, &120_960u32, &1000u32);
 
-        let result = client.try_initialize(&admin, &token, &10_000_0000000i128, &518_400u32, &500u32, &300u32, &150u32, &50u32);
+        let result = client.try_initialize(&admin, &token, &10_000_0000000i128, &518_400u32, &500u32, &300u32, &150u32, &50u32, &120_960u32, &1000u32);
         assert!(result.is_err());
     }
 
@@ -917,6 +1016,93 @@ mod test {
         // Version is unchanged by migrate() itself (migration is schema work,
         // not a version bump).
         assert_eq!(client.version(), 1u32);
+    }
+
+    // ── Grace Period & Defaulter Removal Tests ───────────────────────────
+    // LEDGERS_PER_MONTH = 100 (test constant) and grace_period_ledgers = 10.
+    // Default threshold = 110 ledgers.  All advances stay well under instance TTL.
+
+    #[test]
+    fn test_remove_defaulter_before_grace_period_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, borrower, _token_address, client) = setup_with_token(&env);
+
+        client.deposit(&borrower, &1_000_0000000i128);
+
+        // elapsed = 105: past monthly window (100) but within grace period (threshold 110).
+        env.ledger().with_mut(|l| l.sequence_number += 105);
+
+        let result = client.try_remove_defaulter(&borrower);
+        assert_eq!(result.unwrap_err(), Ok(EscrowError::GracePeriodActive));
+    }
+
+    #[test]
+    fn test_remove_defaulter_succeeds_after_grace_period() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, borrower, token_address, client) = setup_with_token(&env);
+        let token = soroban_sdk::token::Client::new(&env, &token_address);
+
+        client.deposit(&borrower, &2_000_0000000i128);
+
+        // elapsed = 111: past monthly window AND grace period (threshold 110).
+        env.ledger().with_mut(|l| l.sequence_number += 111);
+
+        // 10% default penalty on 2,000 USDC → 200 penalty, 1,800 refund.
+        let refund = client.remove_defaulter(&borrower);
+        assert_eq!(refund, 1_800_0000000i128);
+
+        // Borrower: started 50,000, deposited 2,000, refunded 1,800.
+        assert_eq!(token.balance(&borrower), 49_800_0000000i128);
+
+        // Contract holds only the 200 USDC penalty.
+        assert_eq!(token.balance(&client.address), 200_0000000i128);
+
+        assert_eq!(client.get_total_pooled(), 0);
+
+        let info = client.get_borrower_info(&borrower);
+        assert!(info.withdrawn);
+        assert_eq!(info.deposited, 0);
+    }
+
+    #[test]
+    fn test_remove_non_defaulting_borrower_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, borrower, _token_address, client) = setup_with_token(&env);
+
+        client.deposit(&borrower, &1_000_0000000i128);
+
+        // No time has elapsed — borrower is current.
+        let result = client.try_remove_defaulter(&borrower);
+        assert_eq!(result.unwrap_err(), Ok(EscrowError::BorrowerNotInDefault));
+    }
+
+    #[test]
+    fn test_deposit_resets_default_timer() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, borrower, _token_address, client) = setup_with_token(&env);
+
+        client.deposit(&borrower, &1_000_0000000i128);
+
+        // Advance into the grace period (elapsed = 105; past monthly=100, within threshold=110).
+        env.ledger().with_mut(|l| l.sequence_number += 105);
+
+        // A second deposit resets last_contribution_ledger to sequence 105.
+        client.deposit(&borrower, &500_0000000i128);
+
+        // Advance 5 more (elapsed from new deposit = 5; well below threshold 110).
+        env.ledger().with_mut(|l| l.sequence_number += 5);
+
+        // Borrower is NOT removable — the clock was reset by the second deposit.
+        let result = client.try_remove_defaulter(&borrower);
+        assert_eq!(result.unwrap_err(), Ok(EscrowError::BorrowerNotInDefault));
     }
 
     #[test]

@@ -26,4 +26,8 @@ pub enum EscrowError {
     UpgradeNotPending = 10,
     /// Upgrade was proposed but the timelock delay has not elapsed yet.
     UpgradeTimelockActive = 11,
+    /// The borrower's grace period has not yet expired; removal is not allowed.
+    GracePeriodActive = 12,
+    /// The borrower is not in default and cannot be forcibly removed.
+    BorrowerNotInDefault = 13,
 }

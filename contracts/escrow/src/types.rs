@@ -20,6 +20,10 @@ pub struct EscrowConfig {
     pub penalty_bps_tier3: u32,
     /// Tier 4 penalty (month 7+) in basis points.
     pub penalty_bps_tier4: u32,
+    /// Ledgers after a missed monthly contribution before default removal is allowed (~120,960 ≈ 7 days).
+    pub grace_period_ledgers: u32,
+    /// Penalty applied on forced default removal, in basis points.
+    pub default_penalty_bps: u32,
 }
 
 /// Tracks an individual borrower's escrow balance and status.
@@ -34,6 +38,8 @@ pub struct BorrowerRecord {
     pub released: bool,
     /// Whether the borrower withdrew early.
     pub withdrawn: bool,
+    /// Ledger sequence of the most recent contribution (updated on every deposit).
+    pub last_contribution_ledger: u32,
 }
 
 /// Pending upgrade proposal (used when upgrade_delay_ledgers > 0).

@@ -113,7 +113,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 30000000000
+                    "lo": 20000000000
                   }
                 }
               ]
@@ -135,7 +135,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 30000000000
+                        "lo": 20000000000
                       }
                     }
                   ]
@@ -147,52 +147,33 @@
         }
       ]
     ],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
+              "function_name": "remove_defaulter",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
     [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "set_upgrade_delay",
-              "args": [
-                {
-                  "u32": 200
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "upgrade",
-              "args": [
-                {
-                  "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
     [],
     [],
     []
   ],
   "ledger": {
     "protocol_version": 22,
-    "sequence_number": 0,
+    "sequence_number": 111,
     "timestamp": 0,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
@@ -324,40 +305,7 @@
             },
             "ext": "v0"
           },
-          6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "key": {
-              "ledger_key_nonce": {
-                "nonce": 4270020994084947596
-              }
-            },
-            "durability": "temporary"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-                "key": {
-                  "ledger_key_nonce": {
-                    "nonce": 4270020994084947596
-                  }
-                },
-                "durability": "temporary",
-                "val": "void"
-              }
-            },
-            "ext": "v0"
-          },
-          6311999
+          6312110
         ]
       ],
       [
@@ -470,7 +418,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 30000000000
+                          "lo": 0
                         }
                       }
                     },
@@ -503,7 +451,7 @@
                         "symbol": "withdrawn"
                       },
                       "val": {
-                        "bool": false
+                        "bool": true
                       }
                     }
                   ]
@@ -638,35 +586,6 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "PendingUpgrade"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "map": [
-                            {
-                              "key": {
-                                "symbol": "execute_after"
-                              },
-                              "val": {
-                                "u32": 200
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "new_wasm_hash"
-                              },
-                              "val": {
-                                "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
-                              }
-                            }
-                          ]
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
                               "symbol": "TotalPooled"
                             }
                           ]
@@ -674,20 +593,8 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 30000000000
+                            "lo": 0
                           }
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
-                              "symbol": "UpgradeDelay"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "u32": 200
                         }
                       },
                       {
@@ -756,7 +663,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 470000000000
+                          "lo": 498000000000
                         }
                       }
                     },
@@ -829,7 +736,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 30000000000
+                          "lo": 2000000000
                         }
                       }
                     },

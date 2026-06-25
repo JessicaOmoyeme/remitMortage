@@ -40,6 +40,12 @@
                 },
                 {
                   "u32": 50
+                },
+                {
+                  "u32": 120960
+                },
+                {
+                  "u32": 1000
                 }
               ]
             }
@@ -99,6 +105,22 @@
                               },
                               "val": {
                                 "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "default_penalty_bps"
+                              },
+                              "val": {
+                                "u32": 1000
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "grace_period_ledgers"
+                              },
+                              "val": {
+                                "u32": 120960
                               }
                             },
                             {
