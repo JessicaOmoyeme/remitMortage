@@ -8,6 +8,7 @@ import { healthRouter } from "./routes/health.js";
 import { verificationRouter } from "./routes/verification.js";
 import { borrowerRouter } from "./routes/borrower.js";
 import { loanRouter } from "./routes/loan.js";
+import { milestoneRouter } from "./routes/milestone.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { swaggerSpec } from "./docs/swagger.js";
 
@@ -34,6 +35,7 @@ app.use("/api/health", healthRouter);
 app.use("/api/verification", verificationLimiter, verificationRouter);
 app.use("/api/borrower", borrowerRouter);
 app.use("/api/loan", loanRouter);
+app.use("/api/milestone", milestoneRouter);
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Global error handler (must be after routes)
