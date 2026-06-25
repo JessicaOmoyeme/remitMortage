@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address};
+use soroban_sdk::{contracttype, Address, Symbol};
 
 /// Configuration set during contract initialization.
 #[contracttype]
@@ -22,7 +22,7 @@ pub struct EscrowConfig {
     pub penalty_bps_tier4: u32,
 }
 
-/// Tracks an individual borrower's escrow balance and status.
+/// Tracks an individual borrower's escrow balance and status per goal.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BorrowerRecord {
@@ -34,6 +34,8 @@ pub struct BorrowerRecord {
     pub released: bool,
     /// Whether the borrower withdrew early.
     pub withdrawn: bool,
+    /// Savings target amount specific to this goal.
+    pub target_amount: i128,
 }
 
 /// Storage keys for the escrow contract.
@@ -42,8 +44,8 @@ pub struct BorrowerRecord {
 pub enum DataKey {
     /// Stores the EscrowConfig. Only one per contract instance.
     Config,
-    /// Stores a BorrowerRecord keyed by the borrower's address.
-    Borrower(Address),
+    /// Stores a BorrowerRecord keyed by the borrower's address and goal ID.
+    Borrower(Address, Symbol),
     /// Total pooled balance across all borrowers.
     TotalPooled,
 }
