@@ -1,10 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EvidenceModal } from '../EvidenceModal';
-
-// Mock timers for timeout testing
-vi.useFakeTimers();
 
 const mockMilestoneImage = {
   title: 'Foundation Poured',
@@ -21,15 +17,19 @@ const mockMilestoneVideo = {
 
 describe('EvidenceModal & IPFSMediaPlayer', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.useFakeTimers();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.clearAllTimers();
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
   });
 
   it('renders image file correctly with valid CID', () => {
-    render(<EvidenceModal isOpen={true} onClose={vi.fn()} milestoneData={mockMilestoneImage} />);
+    render(<EvidenceModal isOpen={true} onClose={jest.fn()} milestoneData={mockMilestoneImage} />);
     
     const img = screen.getByTestId('ipfs-image') as HTMLImageElement;
     expect(img).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe('EvidenceModal & IPFSMediaPlayer', () => {
   });
 
   it('renders video file with controls given a video CID', () => {
-    render(<EvidenceModal isOpen={true} onClose={vi.fn()} milestoneData={mockMilestoneVideo} />);
+    render(<EvidenceModal isOpen={true} onClose={jest.fn()} milestoneData={mockMilestoneVideo} />);
     
     const video = screen.getByTestId('ipfs-video') as HTMLVideoElement;
     expect(video).toBeInTheDocument();
@@ -52,14 +52,14 @@ describe('EvidenceModal & IPFSMediaPlayer', () => {
   });
 
   it('switches to fallback gateway on primary gateway timeout', () => {
-    render(<EvidenceModal isOpen={true} onClose={vi.fn()} milestoneData={mockMilestoneImage} />);
+    render(<EvidenceModal isOpen={true} onClose={jest.fn()} milestoneData={mockMilestoneImage} />);
     
     const img = screen.getByTestId('ipfs-image') as HTMLImageElement;
     expect(img.src).toContain('https://cloudflare-ipfs.com/ipfs/');
     
     // Advance time by 5 seconds
     act(() => {
-      vi.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(5000);
     });
     
     // The source should now use the fallback gateway
@@ -67,7 +67,7 @@ describe('EvidenceModal & IPFSMediaPlayer', () => {
   });
 
   it('switches to fallback gateway immediately on load error', () => {
-    render(<EvidenceModal isOpen={true} onClose={vi.fn()} milestoneData={mockMilestoneImage} />);
+    render(<EvidenceModal isOpen={true} onClose={jest.fn()} milestoneData={mockMilestoneImage} />);
     
     const img = screen.getByTestId('ipfs-image') as HTMLImageElement;
     
@@ -78,7 +78,7 @@ describe('EvidenceModal & IPFSMediaPlayer', () => {
   });
 
   it('closes modal when backdrop is clicked', () => {
-    const handleClose = vi.fn();
+    const handleClose = jest.fn();
     render(<EvidenceModal isOpen={true} onClose={handleClose} milestoneData={mockMilestoneImage} />);
     
     fireEvent.click(screen.getByTestId('modal-backdrop'));
@@ -86,7 +86,7 @@ describe('EvidenceModal & IPFSMediaPlayer', () => {
   });
   
   it('toggles fullscreen mode for images', () => {
-    render(<EvidenceModal isOpen={true} onClose={vi.fn()} milestoneData={mockMilestoneImage} />);
+    render(<EvidenceModal isOpen={true} onClose={jest.fn()} milestoneData={mockMilestoneImage} />);
     
     const fullscreenBtn = screen.getByLabelText(/Enter fullscreen view/i);
     expect(fullscreenBtn).toBeInTheDocument();

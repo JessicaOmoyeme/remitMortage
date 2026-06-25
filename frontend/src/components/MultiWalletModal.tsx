@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from 'react';
 import { X, Wallet, CheckCircle2, AlertCircle, Loader2, Link } from 'lucide-react';
 import { useMultiWallet } from '../hooks/useMultiWallet';

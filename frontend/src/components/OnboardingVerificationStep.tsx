@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from 'react';
 import { MultiWalletModal } from './MultiWalletModal';
 import { ShieldCheck, ArrowRight } from 'lucide-react';

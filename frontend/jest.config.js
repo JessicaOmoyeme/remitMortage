@@ -1,3 +1,9 @@
+const nextJest = require("next/jest");
+
+const createJestConfig = nextJest({
+  dir: "./",
+});
+
 /** @type {import('jest').Config} */
 const config = {
   testEnvironment: "jsdom",
@@ -7,9 +13,6 @@ const config = {
     "\\.(css|less|scss|sass)$": "<rootDir>/__mocks__/styleMock.js",
     "\\.(jpg|jpeg|png|gif|svg|webp)$": "<rootDir>/__mocks__/fileMock.js",
   },
-  transform: {
-    "^.+\\.(ts|tsx|js|jsx)$": "babel-jest",
-  },
 };
 
-module.exports = config;
+module.exports = createJestConfig(config);

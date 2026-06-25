@@ -3,7 +3,6 @@ import crypto from "crypto";
 import { Keypair } from "@stellar/stellar-sdk";
 import { analyzeRemittanceHistory } from "../services/stellar.js";
 import { hashReportContent, streamVerificationPdf, VerificationReport } from "../services/pdf.js";
-import { validateVerificationBody } from "../middleware/validate.js";
 import { calculateCreditScore } from "../services/scoring.js";
 import { validateVerificationBody, validateWalletAddress } from "../middleware/validate.js";
 import { createChallenge, consumeChallenge } from "../services/challengeStore.js";
@@ -162,16 +161,15 @@ verificationRouter.get("/report/:reportId", (req, res) => {
     res.status(500).json({ error: "PDF generation failed" });
   }
 });
+
+/**
+ * @openapi
  * /api/verification/score:
  *   post:
  *     summary: Calculate borrower credit score
  *     description: Analyzes remittance history and calculates a 0-100 credit score with tier mapping.
  *     tags:
  *       - Verification
- * /api/verification/challenge:
- *   post:
- *     summary: Issue a wallet-ownership challenge
- *     tags: [Verification]
  *     requestBody:
  *       required: true
  *       content:
@@ -204,6 +202,17 @@ verificationRouter.post("/score", validateVerificationBody, async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /api/verification/challenge:
+ *   post:
+ *     summary: Issue a wallet-ownership challenge
+ *     tags: [Verification]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
  *             type: object
  *             required: [walletAddress]
  *             properties:

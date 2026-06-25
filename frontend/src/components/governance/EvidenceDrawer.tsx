@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect } from 'react';
 import { X, FileText } from 'lucide-react';
 import { IPFSMediaPlayer } from '../IPFSMediaPlayer';

@@ -227,7 +227,7 @@ describe("Notification Services and Dispatcher Tests", () => {
           data: expect.objectContaining({
             status: "Failed",
             attempts: 2,
-            lastError: "Connection Timeout",
+            lastError: "Service dispatch returned false",
           }),
         })
       );

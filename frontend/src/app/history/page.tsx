@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Server } from "@stellar/stellar-sdk";
+import { Horizon } from "@stellar/stellar-sdk";
 
 const Navbar = dynamic(() => import("../../components/Navbar"), { ssr: false });
 
@@ -139,7 +139,7 @@ export default function HistoryPage() {
   const fetchPage = useCallback(
     async (cursor?: string) => {
       if (!publicKey) return null;
-      const server = new Server(HORIZON_TESTNET);
+      const server = new Horizon.Server(HORIZON_TESTNET);
       let query = server
         .payments()
         .forAccount(publicKey)

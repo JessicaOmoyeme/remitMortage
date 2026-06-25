@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "jest --passWithNoTests"
@@ -12,11 +12,13 @@
   "dependencies": {
     "@stellar/freighter-api": "^1.7.1",
     "@stellar/stellar-sdk": "^14.4.3",
+    "ethers": "^6.17.0",
+    "lucide-react": "^1.21.0",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "recharts": "^2.15.0",
     "react-hot-toast": "^2.6.0",
+    "recharts": "^2.15.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

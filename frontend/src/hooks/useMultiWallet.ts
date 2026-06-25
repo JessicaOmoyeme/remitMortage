@@ -1,7 +1,24 @@
-import { useState, useCallback } from 'react';
+"use client";
+
+import { useCallback, useState } from 'react';
 import { BrowserProvider } from 'ethers';
 
 export type WalletType = 'stellar' | 'evm' | 'solana' | null;
+type EthereumProvider = ConstructorParameters<typeof BrowserProvider>[0];
+
+interface SolanaProvider {
+  isPhantom?: boolean;
+  connect: () => Promise<{ publicKey: { toString: () => string } }>;
+  signMessage: (
+    message: Uint8Array,
+    encoding: string
+  ) => Promise<{ signature: Uint8Array }>;
+}
+
+type WalletWindow = Window & {
+  ethereum?: EthereumProvider;
+  solana?: SolanaProvider;
+};
 
 interface WalletState {
   address: string | null;
@@ -10,6 +27,11 @@ interface WalletState {
   isConnecting: boolean;
   error: string | null;
 }
+
+const getWalletWindow = (): WalletWindow => window as WalletWindow;
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 export const useMultiWallet = () => {
   const [walletState, setWalletState] = useState<WalletState>({
@@ -25,11 +47,12 @@ export const useMultiWallet = () => {
       setWalletState(prev => ({ ...prev, isConnecting: true, error: null }));
       
       // Check for MetaMask/EVM Provider
-      if (typeof window.ethereum === 'undefined') {
+      const { ethereum } = getWalletWindow();
+      if (!ethereum) {
         throw new Error('MetaMask or EVM provider is not installed!');
       }
 
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new BrowserProvider(ethereum);
       const accounts = await provider.send('eth_requestAccounts', []);
       const address = accounts[0];
       
@@ -41,8 +64,12 @@ export const useMultiWallet = () => {
         error: null,
       });
       return address;
-    } catch (err: any) {
-      setWalletState(prev => ({ ...prev, isConnecting: false, error: err.message || 'Failed to connect EVM wallet' }));
+    } catch (error) {
+      setWalletState(prev => ({
+        ...prev,
+        isConnecting: false,
+        error: getErrorMessage(error, 'Failed to connect EVM wallet'),
+      }));
       return null;
     }
   };
@@ -52,7 +79,7 @@ export const useMultiWallet = () => {
       setWalletState(prev => ({ ...prev, isConnecting: true, error: null }));
       
       // Check for Phantom Provider
-      const { solana } = window as any;
+      const { solana } = getWalletWindow();
       if (!solana || !solana.isPhantom) {
         throw new Error('Phantom wallet is not installed!');
       }
@@ -68,8 +95,12 @@ export const useMultiWallet = () => {
         error: null,
       });
       return address;
-    } catch (err: any) {
-      setWalletState(prev => ({ ...prev, isConnecting: false, error: err.message || 'Failed to connect Solana wallet' }));
+    } catch (error) {
+      setWalletState(prev => ({
+        ...prev,
+        isConnecting: false,
+        error: getErrorMessage(error, 'Failed to connect Solana wallet'),
+      }));
       return null;
     }
   };
@@ -92,7 +123,12 @@ export const useMultiWallet = () => {
       }
 
       if (walletState.type === 'evm') {
-        const provider = new BrowserProvider(window.ethereum);
+        const { ethereum } = getWalletWindow();
+        if (!ethereum) {
+          throw new Error('MetaMask or EVM provider is not installed!');
+        }
+
+        const provider = new BrowserProvider(ethereum);
         const signer = await provider.getSigner();
         // EIP-191 personal_sign handled automatically by ethers.js signMessage
         const signature = await signer.signMessage(message);
@@ -100,7 +136,11 @@ export const useMultiWallet = () => {
       }
 
       if (walletState.type === 'solana') {
-        const { solana } = window as any;
+        const { solana } = getWalletWindow();
+        if (!solana) {
+          throw new Error('Phantom wallet is not installed!');
+        }
+
         const encodedMessage = new TextEncoder().encode(message);
         
         // window.solana.signMessage returns { signature, publicKey }
@@ -108,15 +148,21 @@ export const useMultiWallet = () => {
         
         // Convert Uint8Array signature to Hex string
         const hexSignature = Array.from(signedMessage.signature)
-          .map((b: any) => b.toString(16).padStart(2, '0'))
+          .map(byte => byte.toString(16).padStart(2, '0'))
           .join('');
           
         return hexSignature;
       }
 
       return null;
-    } catch (err: any) {
-      setWalletState(prev => ({ ...prev, error: err.message || 'Message signing failed or was rejected by the user' }));
+    } catch (error) {
+      setWalletState(prev => ({
+        ...prev,
+        error: getErrorMessage(
+          error,
+          'Message signing failed or was rejected by the user'
+        ),
+      }));
       return null;
     }
   };

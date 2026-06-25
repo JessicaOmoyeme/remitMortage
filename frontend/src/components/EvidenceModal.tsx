@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { X, Maximize2, Minimize2, Calendar, HardDrive } from 'lucide-react';
 import { IPFSMediaPlayer } from './IPFSMediaPlayer';

@@ -17,7 +17,7 @@ export async function pinFileToIPFS(fileBuffer: Buffer, fileName: string): Promi
   }
 
   // Create a Blob from the file buffer
-  const blob = new Blob([fileBuffer]);
+  const blob = new Blob([new Uint8Array(fileBuffer)]);
 
   // Construct form data payload
   const formData = new FormData();
