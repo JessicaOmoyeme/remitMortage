@@ -26,4 +26,6 @@ pub enum EscrowError {
     UpgradeNotPending = 10,
     /// Upgrade was proposed but the timelock delay has not elapsed yet.
     UpgradeTimelockActive = 11,
+    /// Minimum savings lockup period has not elapsed yet.
+    LockupNotMet = 10,
 }

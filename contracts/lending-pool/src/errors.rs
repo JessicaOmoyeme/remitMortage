@@ -28,4 +28,8 @@ pub enum PoolError {
     UpgradeNotPending = 11,
     /// Upgrade was proposed but the timelock delay has not elapsed yet.
     UpgradeTimelockActive = 12,
+    /// Investor cannot change tranche after the initial deposit.
+    TrancheMismatch = 11,
+    /// Junior tranche has insufficient capital to absorb this loss.
+    InsufficientJuniorCapital = 12,
 }
