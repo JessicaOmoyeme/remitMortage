@@ -77,4 +77,6 @@ pub enum DataKey {
     PendingUpgrade,
     /// Number of ledgers the admin must wait between proposing and executing an upgrade.
     UpgradeDelay,
+    /// Emergency pause flag. When true, deposits and withdrawals are blocked.
+    Paused,
 }

@@ -24,4 +24,6 @@ pub enum MilestoneError {
     AlreadyVoted = 9,
     /// Approver set must be non-empty and threshold within 1..=approvers.
     InvalidThreshold = 10,
+    /// Provided IPFS CID does not match v0 (46-char "Qm…") or v1 (59-char "bafy…") format.
+    InvalidCidFormat = 11,
 }

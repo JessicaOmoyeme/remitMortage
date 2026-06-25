@@ -6,7 +6,8 @@ mod types;
 use crate::errors::MilestoneError;
 use crate::types::{DataKey, MilestoneConfig, MilestoneRecord, MilestoneStatus};
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, vec, Address, BytesN, Env, IntoVal, Symbol, Val, Vec,
+    contract, contractimpl, symbol_short, vec, Address, Bytes, BytesN, Env, IntoVal, Symbol, Val,
+    Vec,
 };
 
 const INSTANCE_LIFETIME_THRESHOLD: u32 = 129_600; // ~7.5 days
@@ -52,6 +53,27 @@ impl MilestoneContract {
         env.storage()
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    }
+
+    /// Validate that `cid` is a well-formed IPFS CID.
+    /// Accepts CIDv0 (46 bytes, starts with "Qm") or CIDv1 (59 bytes, starts with "bafy").
+    fn validate_cid(cid: &Bytes) -> Result<(), MilestoneError> {
+        let len = cid.len();
+        if len == 46
+            && cid.get(0) == Some(b'Q' as u32)
+            && cid.get(1) == Some(b'm' as u32)
+        {
+            return Ok(());
+        }
+        if len == 59
+            && cid.get(0) == Some(b'b' as u32)
+            && cid.get(1) == Some(b'a' as u32)
+            && cid.get(2) == Some(b'f' as u32)
+            && cid.get(3) == Some(b'y' as u32)
+        {
+            return Ok(());
+        }
+        Err(MilestoneError::InvalidCidFormat)
     }
 }
 
@@ -104,6 +126,7 @@ impl MilestoneContract {
         loan_id: BytesN<32>,
         amount: i128,
         evidence_hash: BytesN<32>,
+        cid: Bytes,
     ) -> Result<(), MilestoneError> {
         contractor.require_auth();
 
@@ -120,6 +143,9 @@ impl MilestoneContract {
             return Err(MilestoneError::EvidenceRequired);
         }
 
+        // Validate IPFS CID format before storing.
+        Self::validate_cid(&cid)?;
+
         // Proposal IDs are unique; do not clobber an existing milestone.
         if env
             .storage()
@@ -134,6 +160,7 @@ impl MilestoneContract {
             contractor,
             amount,
             evidence_hash,
+            cid,
             status: MilestoneStatus::Proposed,
             votes: 0,
             created_ledger: env.ledger().sequence(),
@@ -247,7 +274,37 @@ impl MilestoneContract {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, BytesN, Env};
+    use soroban_sdk::{testutils::Address as _, vec, Bytes, BytesN, Env, Vec};
+
+    fn make_client(env: &Env) -> (Address, MilestoneContractClient<'_>) {
+        let admin = Address::generate(env);
+        let token = Address::generate(env);
+        let lending = Address::generate(env);
+        let approver = Address::generate(env);
+        let approvers: Vec<Address> = vec![env, approver];
+        let contract_id = env.register(MilestoneContract, ());
+        let client = MilestoneContractClient::new(env, &contract_id);
+        client.initialize(&admin, &token, &lending, &approvers, &1u32);
+        (admin, client)
+    }
+
+    fn cidv0(env: &Env) -> Bytes {
+        // 46-byte v0 CID starting with "Qm"
+        let mut raw = [b'x'; 46];
+        raw[0] = b'Q';
+        raw[1] = b'm';
+        Bytes::from_slice(env, &raw)
+    }
+
+    fn cidv1(env: &Env) -> Bytes {
+        // 59-byte v1 CID starting with "bafy"
+        let mut raw = [b'x'; 59];
+        raw[0] = b'b';
+        raw[1] = b'a';
+        raw[2] = b'f';
+        raw[3] = b'y';
+        Bytes::from_slice(env, &raw)
+    }
 
     #[test]
     fn test_initialize_and_double_init() {
@@ -257,15 +314,15 @@ mod test {
         let admin = Address::generate(&env);
         let token = Address::generate(&env);
         let lending = Address::generate(&env);
+        let approver = Address::generate(&env);
+        let approvers: Vec<Address> = vec![&env, approver];
 
         let contract_id = env.register(MilestoneContract, ());
         let client = MilestoneContractClient::new(&env, &contract_id);
 
-        // initialize should succeed (regular call panics on error, so success means no panic).
-        client.initialize(&admin, &token, &lending);
+        client.initialize(&admin, &token, &lending, &approvers, &1u32);
 
-        // double initialize should fail.
-        let res = client.try_initialize(&admin, &token, &lending);
+        let res = client.try_initialize(&admin, &token, &lending, &approvers, &1u32);
         assert_eq!(res.unwrap_err(), Ok(MilestoneError::AlreadyInitialized));
     }
 
@@ -274,33 +331,89 @@ mod test {
         let env = Env::default();
         env.mock_all_auths();
 
-        let admin = Address::generate(&env);
-        let token = Address::generate(&env);
-        let lending = Address::generate(&env);
         let contractor = Address::generate(&env);
+        let (_admin, client) = make_client(&env);
 
-        let contract_id = env.register(MilestoneContract, ());
-        let client = MilestoneContractClient::new(&env, &contract_id);
+        let proposal_id = BytesN::from_array(&env, &[1u8; 32]);
+        let loan_id = BytesN::from_array(&env, &[2u8; 32]);
+        let evidence = BytesN::from_array(&env, &[3u8; 32]);
+        let cid = cidv0(&env);
 
-        client.initialize(&admin, &token, &lending);
+        client.propose_milestone(&contractor, &proposal_id, &loan_id, &1000i128, &evidence, &cid);
 
-        let loan_id = BytesN::from_array(&env, &[1u8; 32]);
-        let evidence = BytesN::from_array(&env, &[2u8; 32]);
+        let record = client.get_milestone(&proposal_id);
+        assert_eq!(record.status, MilestoneStatus::Proposed);
+        assert_eq!(record.contractor, contractor);
+        assert_eq!(record.amount, 1000i128);
+        assert_eq!(record.evidence_hash, evidence);
+        assert_eq!(record.cid, cid);
+    }
 
-        client.propose_milestone(&contractor, &loan_id, &1000i128, &evidence);
+    #[test]
+    fn test_invalid_cid_reverts() {
+        let env = Env::default();
+        env.mock_all_auths();
 
-        // Read stored milestone via the contract's storage context.
-        env.as_contract(&contract_id, || {
-            let record: MilestoneRecord = env
-                .storage()
-                .persistent()
-                .get(&DataKey::Milestone(loan_id.clone()))
-                .expect("milestone missing");
-            assert_eq!(record.status, MilestoneStatus::Proposed);
-            assert_eq!(record.contractor, contractor);
-            assert_eq!(record.amount, 1000i128);
-            assert_eq!(record.evidence, evidence);
-        });
+        let contractor = Address::generate(&env);
+        let (_admin, client) = make_client(&env);
+
+        let proposal_id = BytesN::from_array(&env, &[10u8; 32]);
+        let loan_id = BytesN::from_array(&env, &[11u8; 32]);
+        let evidence = BytesN::from_array(&env, &[12u8; 32]);
+
+        // Too short
+        let bad_cid = Bytes::from_slice(&env, b"QmShort");
+        let res = client.try_propose_milestone(
+            &contractor, &proposal_id, &loan_id, &1000i128, &evidence, &bad_cid,
+        );
+        assert_eq!(res.unwrap_err(), Ok(MilestoneError::InvalidCidFormat));
+
+        // Correct length but wrong prefix
+        let mut wrong_prefix = [b'x'; 46];
+        wrong_prefix[0] = b'X';
+        wrong_prefix[1] = b'z';
+        let bad_cid2 = Bytes::from_slice(&env, &wrong_prefix);
+        let res2 = client.try_propose_milestone(
+            &contractor, &proposal_id, &loan_id, &1000i128, &evidence, &bad_cid2,
+        );
+        assert_eq!(res2.unwrap_err(), Ok(MilestoneError::InvalidCidFormat));
+    }
+
+    #[test]
+    fn test_valid_cidv0_passes() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contractor = Address::generate(&env);
+        let (_admin, client) = make_client(&env);
+
+        let proposal_id = BytesN::from_array(&env, &[20u8; 32]);
+        let loan_id = BytesN::from_array(&env, &[21u8; 32]);
+        let evidence = BytesN::from_array(&env, &[22u8; 32]);
+
+        client.propose_milestone(
+            &contractor, &proposal_id, &loan_id, &500i128, &evidence, &cidv0(&env),
+        );
+        let record = client.get_milestone(&proposal_id);
+        assert_eq!(record.status, MilestoneStatus::Proposed);
+    }
+
+    #[test]
+    fn test_valid_cidv1_passes() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contractor = Address::generate(&env);
+        let (_admin, client) = make_client(&env);
+
+        let proposal_id = BytesN::from_array(&env, &[30u8; 32]);
+        let loan_id = BytesN::from_array(&env, &[31u8; 32]);
+        let evidence = BytesN::from_array(&env, &[32u8; 32]);
+
+        client.propose_milestone(
+            &contractor, &proposal_id, &loan_id, &750i128, &evidence, &cidv1(&env),
+        );
+        let record = client.get_milestone(&proposal_id);
+        assert_eq!(record.status, MilestoneStatus::Proposed);
     }
 }
-mod test;

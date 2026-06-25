@@ -10,7 +10,7 @@ pub mod test_utils;
 use crate::errors::EscrowError;
 use crate::token_utils::get_token_client;
 use crate::types::{BorrowerRecord, DataKey, EscrowConfig, PendingUpgradeRecord};
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, BytesN, Env, IntoVal};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, BytesN, Env, IntoVal, Symbol};
 
 const INSTANCE_BUMP_AMOUNT: u32 = 518_400; // ~30 days
 const INSTANCE_LIFETIME_THRESHOLD: u32 = 129_600; // ~7.5 days
@@ -85,6 +85,19 @@ impl EscrowContract {
             .instance()
             .get(&DataKey::TotalPooled)
             .unwrap_or(0i128)
+    }
+
+    fn check_not_paused(env: &Env) -> Result<(), EscrowError> {
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+        if paused {
+            Err(EscrowError::ContractPaused)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -161,6 +174,7 @@ impl EscrowContract {
     /// total pooled amount are updated accordingly.
     pub fn deposit(env: Env, borrower: Address, goal_id: Symbol, amount: i128) -> Result<(), EscrowError> {
         borrower.require_auth();
+        Self::check_not_paused(&env)?;
 
         if amount <= 0 {
             return Err(EscrowError::InvalidAmount);
@@ -216,6 +230,7 @@ impl EscrowContract {
     /// The penalty stays in the contract (future: route to protocol treasury).
     pub fn withdraw(env: Env, borrower: Address, goal_id: Symbol) -> Result<i128, EscrowError> {
         borrower.require_auth();
+        Self::check_not_paused(&env)?;
 
         let config = Self::get_config(&env)?;
         let mut record = Self::get_borrower(&env, &borrower, &goal_id);
@@ -504,6 +519,24 @@ impl EscrowContract {
             .instance()
             .get(&DataKey::Version)
             .unwrap_or(1u32)
+    }
+
+    // ── Emergency Pause ──────────────────────────────────────────────────
+
+    /// Halt all deposits and withdrawals. Admin-only.
+    pub fn pause(env: Env) -> Result<(), EscrowError> {
+        let config = Self::get_config(&env)?;
+        config.admin.require_auth();
+        env.storage().instance().set(&DataKey::Paused, &true);
+        Ok(())
+    }
+
+    /// Resume deposits and withdrawals after a pause. Admin-only.
+    pub fn unpause(env: Env) -> Result<(), EscrowError> {
+        let config = Self::get_config(&env)?;
+        config.admin.require_auth();
+        env.storage().instance().set(&DataKey::Paused, &false);
+        Ok(())
     }
 
     // ── Upgrade Functions ────────────────────────────────────────────────
@@ -1578,6 +1611,50 @@ mod test {
 
         // Verify total pooled now only contains land deposit (withdrawn amount removed).
         assert_eq!(client.get_total_pooled(), 6_000_0000000i128);
+    }
+
+    #[test]
+    fn test_deposit_reverts_when_paused() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, borrower, _token_address, client) = setup_with_token(&env);
+        let goal = Symbol::new(&env, "g1");
+
+        client.pause();
+
+        let res = client.try_deposit(&borrower, &goal, &1_000_0000000i128);
+        assert_eq!(res.unwrap_err(), Ok(EscrowError::ContractPaused));
+    }
+
+    #[test]
+    fn test_withdraw_reverts_when_paused() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, borrower, _token_address, client) = setup_with_token(&env);
+        let goal = Symbol::new(&env, "g1");
+
+        client.deposit(&borrower, &goal, &2_000_0000000i128);
+        client.pause();
+
+        let res = client.try_withdraw(&borrower, &goal);
+        assert_eq!(res.unwrap_err(), Ok(EscrowError::ContractPaused));
+    }
+
+    #[test]
+    fn test_deposit_resumes_after_unpause() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, borrower, _token_address, client) = setup_with_token(&env);
+        let goal = Symbol::new(&env, "g1");
+
+        client.pause();
+        client.unpause();
+
+        client.deposit(&borrower, &goal, &1_000_0000000i128);
+        assert_eq!(client.get_balance(&borrower, &goal), 1_000_0000000i128);
     }
 }
 }

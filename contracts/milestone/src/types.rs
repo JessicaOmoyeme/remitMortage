@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, BytesN, Vec};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Vec};
 
 /// Configuration for the milestone disbursement contract.
 #[contracttype]
@@ -38,6 +38,8 @@ pub struct MilestoneRecord {
     pub amount: i128,
     /// IPFS evidence hash (content digest) proving milestone completion.
     pub evidence_hash: BytesN<32>,
+    /// IPFS CID string (v0: 46 chars starting "Qm", v1: 59 chars starting "bafy").
+    pub cid: Bytes,
     /// Current status in the lifecycle.
     pub status: MilestoneStatus,
     /// Number of governance votes the proposal has received.

@@ -32,4 +32,6 @@ pub enum EscrowError {
     BorrowerNotInDefault = 13,
     /// Minimum savings lockup period has not elapsed yet.
     LockupNotMet = 10,
+    /// Operation rejected because the contract is paused.
+    ContractPaused = 14,
 }

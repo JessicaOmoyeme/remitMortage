@@ -119,6 +119,10 @@ pub struct LoanRecord {
     /// Ledger when the loan was created.
     pub created_ledger: u32,
     // schedule moved to separate storage key (LoanSchedule) to avoid optional contracttype encoding issues
+    /// Ledger sequence when compound interest was last accrued.
+    pub last_interest_ledger: u32,
+    /// Total outstanding debt including compounded interest, minus repayments.
+    pub outstanding_debt: i128,
 }
 
 /// Storage keys for the lending pool contract.

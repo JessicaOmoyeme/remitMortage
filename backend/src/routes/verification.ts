@@ -5,6 +5,7 @@ import { analyzeRemittanceHistory } from "../services/stellar.js";
 import { hashReportContent, streamVerificationPdf, VerificationReport } from "../services/pdf.js";
 import { calculateCreditScore } from "../services/scoring.js";
 import { validateVerificationBody, validateWalletAddress, validateMultiChainOwnership } from "../middleware/validate.js";
+import { verificationChallengeRateLimiter } from "../middleware/rateLimit.js";
 import { createChallenge, consumeChallenge } from "../services/challengeStore.js";
 import { verifyEvmSignature } from "../services/evm.js";
 import { verifySolanaSignature } from "../services/solana.js";
@@ -210,7 +211,7 @@ verificationRouter.post("/score", validateVerificationBody, async (req, res) => 
  *       400:
  *         description: Invalid or missing walletAddress / network.
  */
-verificationRouter.post("/challenge", validateMultiChainOwnership, (req, res) => {
+verificationRouter.post("/challenge", verificationChallengeRateLimiter, validateMultiChainOwnership, (req, res) => {
   const { walletAddress } = req.body;
   const challenge = createChallenge(walletAddress);
   res.json({ challenge });
@@ -250,7 +251,7 @@ verificationRouter.post("/challenge", validateMultiChainOwnership, (req, res) =>
  *       410:
  *         description: Challenge expired or already used.
  */
-verificationRouter.post("/verify-ownership", validateMultiChainOwnership, (req, res) => {
+verificationRouter.post("/verify-ownership", verificationChallengeRateLimiter, validateMultiChainOwnership, (req, res) => {
   const { walletAddress, network, challenge, signature } = req.body;
 
   if (!challenge || !signature) {

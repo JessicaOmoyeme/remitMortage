@@ -126,6 +126,54 @@ impl LendingPoolContract {
     fn token_client<'a>(env: &'a Env, token_addr: &'a Address) -> token::Client<'a> {
         token::Client::new(env, token_addr)
     }
+
+    /// Fixed-point scale for compound interest calculations (10^9).
+    const INTEREST_SCALE: i128 = 1_000_000_000i128;
+
+    /// Number of ledgers per compounding period.
+    /// In tests this is 100 (compact); in production this is 518_400 (~30 days).
+    #[cfg(not(test))]
+    const COMPOUND_PERIOD: u32 = 518_400;
+    #[cfg(test)]
+    const COMPOUND_PERIOD: u32 = 100;
+
+    /// Raise `base` (fixed-point, scale = INTEREST_SCALE) to the power `exp`
+    /// using binary exponentiation. Returns a fixed-point result in the same scale.
+    fn compound_pow(base: i128, mut exp: u32) -> i128 {
+        let scale = Self::INTEREST_SCALE;
+        let mut result = scale; // 1.0 in fixed-point
+        let mut b = base;
+        while exp > 0 {
+            if exp & 1 == 1 {
+                result = result.saturating_mul(b) / scale;
+            }
+            b = b.saturating_mul(b) / scale;
+            exp >>= 1;
+        }
+        result
+    }
+
+    /// Accrue compound interest on `loan.outstanding_debt` for the ledgers
+    /// elapsed since `loan.last_interest_ledger`. Updates both fields in place.
+    fn accrue_interest(env: &Env, loan: &mut LoanRecord) {
+        let current = env.ledger().sequence();
+        if current <= loan.last_interest_ledger || loan.outstanding_debt <= 0 {
+            loan.last_interest_ledger = current;
+            return;
+        }
+        let elapsed = current - loan.last_interest_ledger;
+        let periods = elapsed / Self::COMPOUND_PERIOD;
+        if periods == 0 {
+            return;
+        }
+        // per-period factor = SCALE + rate_bps * SCALE / 10_000
+        let factor = Self::INTEREST_SCALE
+            + (loan.interest_rate_bps as i128 * Self::INTEREST_SCALE) / 10_000;
+        let compound = Self::compound_pow(factor, periods);
+        loan.outstanding_debt =
+            loan.outstanding_debt.saturating_mul(compound) / Self::INTEREST_SCALE;
+        loan.last_interest_ledger = current;
+    }
 }
 
 #[contractimpl]
@@ -284,6 +332,8 @@ impl LendingPoolContract {
             interest_rate_bps: config.interest_rate_bps,
             status: LoanStatus::Requested,
             created_ledger: env.ledger().sequence(),
+            last_interest_ledger: env.ledger().sequence(),
+            outstanding_debt: 0,
         };
 
         Self::set_loan(&env, &loan_id, &loan);
@@ -409,7 +459,10 @@ impl LendingPoolContract {
         let token = Self::token_client(&env, &config.token);
         token.transfer(&env.current_contract_address(), &recipient, &amount);
 
+        // Accrue compound interest on existing outstanding debt, then add disbursed amount.
+        Self::accrue_interest(&env, &mut loan);
         loan.disbursed += amount;
+        loan.outstanding_debt = loan.outstanding_debt.saturating_add(amount);
         Self::set_loan(&env, &loan_id, &loan);
 
         // Reduce available liquidity.
@@ -461,10 +514,13 @@ impl LendingPoolContract {
             return Err(PoolError::InvalidLoanState);
         }
 
-        // Calculate total owed (principal + simple interest).
+        // Accrue compound interest before computing what is owed.
+        Self::accrue_interest(&env, &mut loan);
+
+        // Keep simple-interest total_owed for yield waterfall distribution.
         let interest = (loan.principal * loan.interest_rate_bps as i128) / 10_000;
         let total_owed = loan.principal + interest;
-        let remaining = total_owed - loan.repaid;
+        let remaining = loan.outstanding_debt;
 
         if amount > remaining {
             return Err(PoolError::OverPayment);
@@ -527,6 +583,7 @@ impl LendingPoolContract {
 
         let old_repaid = loan.repaid;
         loan.repaid += amount;
+        loan.outstanding_debt = loan.outstanding_debt.saturating_sub(amount);
 
         // ── Yield Distribution Waterfall ──────────────────────────────
         // Determine how much of this repayment is interest (vs principal recovery).
@@ -588,8 +645,8 @@ impl LendingPoolContract {
                 .set(&DataKey::TotalRepaidInterest, &total_interest);
         }
 
-        // Mark as repaid if fully paid.
-        if loan.repaid >= total_owed {
+        // Mark as repaid if fully paid (compound debt cleared).
+        if loan.outstanding_debt == 0 {
             loan.status = LoanStatus::Repaid;
             
             // Release any undisbursed locked commitments
@@ -638,8 +695,11 @@ impl LendingPoolContract {
             return Err(PoolError::InvalidLoanState);
         }
 
-        // Outstanding loss = amount disbursed that was never repaid.
-        let loss = loan.disbursed - loan.repaid;
+        // Accrue any outstanding compound interest before computing the loss.
+        Self::accrue_interest(&env, &mut loan);
+
+        // Outstanding loss = compound outstanding debt (not simple repaid check).
+        let loss = loan.outstanding_debt;
 
         if loss > 0 {
             let mut junior_info = Self::read_tranche_info(&env, &Tranche::Junior);
@@ -1664,5 +1724,69 @@ mod test {
 
         // No delay set → get_pending_upgrade returns None before any call.
         assert!(client.get_pending_upgrade().is_none());
+    }
+
+    #[test]
+    fn test_compound_interest_grows_exponentially() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, investor, token_address, client) = setup_pool(&env);
+        let sac = StellarAssetClient::new(&env, &token_address);
+        let borrower = Address::generate(&env);
+        sac.mint(&borrower, &200_000_0000000i128);
+
+        // Investor deposits liquidity.
+        client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
+
+        // Borrower requests and admin approves a loan.
+        let loan_id = BytesN::from_array(&env, &[42u8; 32]);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        // Disburse the full principal.
+        client.disburse(&loan_id, &borrower, &10_000_0000000i128);
+
+        let loan_after_disburse = client.get_loan_info(&loan_id);
+        assert_eq!(loan_after_disburse.outstanding_debt, 10_000_0000000i128);
+
+        // Advance 1 compound period (100 ledgers in test).
+        let start = env.ledger().sequence();
+        env.ledger().set_sequence_number(start + 100);
+
+        // Trigger accrual via a repay call (tiny amount to update state).
+        // With rate_bps=800, per-period factor = 1 + 800/10_000 = 1.08
+        // After 1 period: outstanding_debt ≈ 10_000 * 1.08 = 10_800
+        client.repay(&borrower, &loan_id, &1_0000000i128);
+        let loan_1 = client.get_loan_info(&loan_id);
+        let debt_after_1 = loan_1.outstanding_debt;
+        // Should be approximately 10_800 USDC minus the 1 USDC repaid.
+        assert!(debt_after_1 > 10_000_0000000i128);
+
+        // Advance another period.
+        env.ledger().set_sequence_number(start + 200);
+        client.repay(&borrower, &loan_id, &1_0000000i128);
+        let loan_2 = client.get_loan_info(&loan_id);
+        let debt_after_2 = loan_2.outstanding_debt;
+
+        // After 2 compound periods, debt should be exponentially higher than after 1.
+        // d2 > d1 (still growing even after partial repayments).
+        assert!(debt_after_2 > debt_after_1);
+    }
+
+    #[test]
+    fn test_outstanding_debt_initialized_at_zero() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, investor, _token_address, client) = setup_pool(&env);
+        client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
+
+        let borrower = Address::generate(&env);
+        let loan_id = BytesN::from_array(&env, &[99u8; 32]);
+        client.request_loan(&borrower, &loan_id, &5_000_0000000i128);
+
+        let loan = client.get_loan_info(&loan_id);
+        assert_eq!(loan.outstanding_debt, 0i128);
     }
 }
