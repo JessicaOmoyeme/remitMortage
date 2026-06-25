@@ -85,7 +85,9 @@ export default function EvidenceUpload({ milestoneId, onUploadSuccess }: Evidenc
       
       {!cid ? (
         <div className="space-y-4">
-          <input 
+          <label htmlFor={`evidence-upload-${milestoneId}`} className="sr-only">Upload Evidence</label>
+          <input
+            id={`evidence-upload-${milestoneId}`}
             type="file" 
             ref={fileInputRef}
             onChange={handleFileChange} 
@@ -130,7 +132,7 @@ export default function EvidenceUpload({ milestoneId, onUploadSuccess }: Evidenc
           </div>
           <p className="text-sm font-semibold text-[var(--success)] mb-1">Upload Successful</p>
           <div className="text-xs text-[var(--text-muted)] w-full overflow-hidden text-ellipsis whitespace-nowrap text-center mb-2">
-            CID: {cid}
+            {`CID: ${cid}`}
           </div>
           <a 
             href={`https://ipfs.io/ipfs/${cid}`} 
