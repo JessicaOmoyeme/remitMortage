@@ -6,6 +6,20 @@ import { getOnboardingStore, useOnboardingState } from "./useOnboardingState";
 import ProgressStepper from "./ProgressStepper";
 import { isConnected, getPublicKey } from "@stellar/freighter-api";
 import { toast } from "react-hot-toast";
+import { z } from "zod";
+
+// Stellar G... public key: starts with G, exactly 56 alphanumeric chars
+const stellarAddressSchema = z.string().regex(
+  /^G[A-Z2-7]{55}$/,
+  "Invalid Stellar address — must start with G and be 56 characters"
+);
+
+const savingsGoalSchema = z.object({
+  savingsTarget: z.number().min(500, "Goal must be at least $500").max(1_000_000, "Goal must be at most $1,000,000"),
+  savingsDuration: z.union([z.literal(6), z.literal(9), z.literal(12)], {
+    error: "Duration must be 6, 9, or 12 months",
+  }),
+});
 
 const STEPS = ["Connect Wallet", "Verify History", "Set Goal", "First Deposit"];
 
@@ -26,6 +40,7 @@ export default function OnboardingWizard() {
   const [usdcBalance, setUsdcBalance] = useState("0");
   const [isLoading, setIsLoading] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL!;
   const USDC_TOKEN_ID = process.env.NEXT_PUBLIC_USDC_TOKEN_ID!;
@@ -157,19 +172,22 @@ export default function OnboardingWizard() {
           <div>
             <h3 className="text-xl font-semibold mb-4">Verify Your Remittance History</h3>
             <p className="text-[var(--text-secondary)] mb-6">Enter the Stellar address of the family member you regularly send remittances to.</p>
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-1">
               <input
                 type="text"
                 placeholder="Recipient's G... address"
                 className="input-field flex-1"
                 value={recipientAddress}
-                onChange={(e) => store.getState().setRecipientAddress(e.target.value)}
+                onChange={(e) => { store.getState().setRecipientAddress(e.target.value); setFieldErrors((prev) => ({ ...prev, recipientAddress: "" })); }}
                 disabled={isLoading || isVerified}
               />
               <button onClick={handleVerify} className="btn-primary" disabled={isLoading || !recipientAddress || isVerified}>
                 {isLoading ? "Verifying..." : isVerified ? "Verified" : "Verify"}
               </button>
             </div>
+            {fieldErrors.recipientAddress && (
+              <p className="text-red-400 text-sm mb-3">{fieldErrors.recipientAddress}</p>
+            )}
             {verificationMessage && (
               <div className={`p-3 rounded-lg text-sm ${isVerified ? "bg-green-500/10 text-green-300" : "bg-red-500/10 text-red-300"}`}>
                 {verificationMessage}
@@ -189,20 +207,26 @@ export default function OnboardingWizard() {
                   type="number"
                   className="input-field w-full"
                   value={savingsTarget}
-                  onChange={(e) => store.getState().setSavingsTarget(Number(e.target.value))}
+                  onChange={(e) => { store.getState().setSavingsTarget(Number(e.target.value)); setFieldErrors((prev) => ({ ...prev, savingsTarget: "" })); }}
                 />
+                {fieldErrors.savingsTarget && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.savingsTarget}</p>
+                )}
               </div>
               <div>
                 <label className="text-sm text-[var(--text-muted)]">Savings Duration</label>
                 <select
                   className="input-field w-full"
                   value={savingsDuration}
-                  onChange={(e) => store.getState().setSavingsDuration(Number(e.target.value))}
+                  onChange={(e) => { store.getState().setSavingsDuration(Number(e.target.value)); setFieldErrors((prev) => ({ ...prev, savingsDuration: "" })); }}
                 >
                   <option value={6}>6 Months</option>
                   <option value={9}>9 Months</option>
                   <option value={12}>12 Months</option>
                 </select>
+                {fieldErrors.savingsDuration && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.savingsDuration}</p>
+                )}
               </div>
               <div className="glass-card p-4 text-center">
                 <p className="text-sm text-[var(--text-muted)]">Estimated Monthly Contribution</p>
@@ -237,6 +261,30 @@ export default function OnboardingWizard() {
     }
   };
 
+  const validateStep = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (step === 2) {
+      const result = stellarAddressSchema.safeParse(recipientAddress);
+      if (!result.success) {
+        errors.recipientAddress = result.error.issues[0].message;
+      }
+    }
+
+    if (step === 3) {
+      const result = savingsGoalSchema.safeParse({ savingsTarget, savingsDuration });
+      if (!result.success) {
+        result.error.issues.forEach((issue) => {
+          const field = issue.path[0] as string;
+          if (!errors[field]) errors[field] = issue.message;
+        });
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const canGoNext = () => {
     switch (step) {
       case 1:
@@ -265,7 +313,7 @@ export default function OnboardingWizard() {
           Back
         </button>
         <button
-          onClick={() => store.getState().setStep(step + 1)}
+          onClick={() => { if (validateStep()) store.getState().setStep(step + 1); }}
           className="btn-primary"
           disabled={!canGoNext() || isLoading}
         >
