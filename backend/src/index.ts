@@ -10,6 +10,7 @@ import { borrowerRouter } from "./routes/borrower.js";
 import { loanRouter } from "./routes/loan.js";
 import { milestoneRouter } from "./routes/milestone.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { startEventListener } from "./services/eventListener.js";
 import { startNotificationScheduler } from "./services/notification.js";
 import { loadConfig } from "./config.js";
 
@@ -60,6 +61,11 @@ app.use(errorHandler);
 // ── Start Server ────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🚀 RemitMortgage API running on http://localhost:${PORT}`);
+
+  // Start the Soroban contract event listener alongside the HTTP server. It
+  // runs in the background and self-heals via exponential backoff, so a failing
+  // RPC node never takes down the API process.
+  startEventListener();
   startNotificationScheduler();
 });
 
