@@ -8,6 +8,8 @@ pub struct PendingUpgradeRecord {
     pub new_wasm_hash: BytesN<32>,
     /// The ledger sequence after which this upgrade may execute.
     pub execute_after: u32,
+}
+
 /// Tranche types for risk stratification of investor deposits.
 ///
 /// Senior tranche offers a lower, fixed yield rate but is protected from losses.
@@ -123,6 +125,8 @@ pub struct LoanRecord {
     pub last_interest_ledger: u32,
     /// Total outstanding debt including compounded interest, minus repayments.
     pub outstanding_debt: i128,
+    /// Optional escrow contract address that originated this loan via the bridge.
+    pub escrow_origin: Option<Address>,
 }
 
 /// Storage keys for the lending pool contract.

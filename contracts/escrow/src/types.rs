@@ -1,5 +1,4 @@
-use soroban_sdk::{contracttype, Address, BytesN};
-use soroban_sdk::{contracttype, Address, Symbol};
+use soroban_sdk::{contracttype, Address, BytesN, Symbol};
 
 /// Configuration set during contract initialization.
 #[contracttype]

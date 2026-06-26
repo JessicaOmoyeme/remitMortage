@@ -66,6 +66,9 @@
                 },
                 {
                   "u32": 800
+                },
+                {
+                  "u32": 400
                 }
               ]
             }
@@ -435,10 +438,64 @@
                             },
                             {
                               "key": {
+                                "symbol": "senior_rate_bps"
+                              },
+                              "val": {
+                                "u32": 400
+                              }
+                            },
+                            {
+                              "key": {
                                 "symbol": "token"
                               },
                               "val": {
                                 "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "JuniorTranche"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "map": [
+                            {
+                              "key": {
+                                "symbol": "total_deposited"
+                              },
+                              "val": {
+                                "i128": {
+                                  "hi": 0,
+                                  "lo": 0
+                                }
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "total_loss_absorbed"
+                              },
+                              "val": {
+                                "i128": {
+                                  "hi": 0,
+                                  "lo": 0
+                                }
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "total_yield_distributed"
+                              },
+                              "val": {
+                                "i128": {
+                                  "hi": 0,
+                                  "lo": 0
+                                }
                               }
                             }
                           ]
@@ -480,6 +537,52 @@
                               },
                               "val": {
                                 "bytes": "0707070707070707070707070707070707070707070707070707070707070707"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "SeniorTranche"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "map": [
+                            {
+                              "key": {
+                                "symbol": "total_deposited"
+                              },
+                              "val": {
+                                "i128": {
+                                  "hi": 0,
+                                  "lo": 0
+                                }
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "total_loss_absorbed"
+                              },
+                              "val": {
+                                "i128": {
+                                  "hi": 0,
+                                  "lo": 0
+                                }
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "total_yield_distributed"
+                              },
+                              "val": {
+                                "i128": {
+                                  "hi": 0,
+                                  "lo": 0
+                                }
                               }
                             }
                           ]

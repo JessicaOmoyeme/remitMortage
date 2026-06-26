@@ -31,9 +31,11 @@ pub enum EscrowError {
     /// The borrower is not in default and cannot be forcibly removed.
     BorrowerNotInDefault = 13,
     /// Minimum savings lockup period has not elapsed yet.
-    LockupNotMet = 10,
+    LockupNotMet = 17,
     /// Operation rejected because the contract is paused.
     ContractPaused = 14,
     /// Proposed new admin is not the caller or no transfer is pending.
     NotPendingAdmin = 15,
+    /// Cross-contract bridge call to the lending pool failed.
+    BridgeFailed = 16,
 }

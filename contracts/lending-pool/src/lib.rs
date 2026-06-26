@@ -3,13 +3,9 @@
 mod errors;
 mod types;
 
-use crate::errors::PoolError;
-use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PendingUpgradeRecord, PoolConfig, RepaymentSchedule};
-use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PoolConfig, Tranche, TrancheInfo};
-use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PoolConfig, RepaymentSchedule};
-use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env};
-use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PoolConfig};
-use soroban_sdk::{contract, contractimpl, symbol_short, Symbol, token, Address, BytesN, Env, IntoVal};
+pub use crate::errors::PoolError;
+pub use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PendingUpgradeRecord, PoolConfig, RepaymentSchedule, Tranche, TrancheInfo};
+use soroban_sdk::{contract, contractimpl, symbol_short, Symbol, token, Address, BytesN, Env};
 
 const INSTANCE_BUMP_AMOUNT: u32 = 518_400; // ~30 days
 const INSTANCE_LIFETIME_THRESHOLD: u32 = 129_600; // ~7.5 days
@@ -323,7 +319,26 @@ impl LendingPoolContract {
     ) -> Result<(), PoolError> {
         Self::check_not_paused(&env)?;
         borrower.require_auth();
+        Self::do_request_loan(&env, borrower, loan_id, principal, None)
+    }
 
+    pub fn request_loan_with_origin(
+        env: Env,
+        borrower: Address,
+        loan_id: BytesN<32>,
+        principal: i128,
+        escrow_origin: Address,
+    ) -> Result<(), PoolError> {
+        Self::do_request_loan(&env, borrower, loan_id, principal, Some(escrow_origin))
+    }
+
+    fn do_request_loan(
+        env: &Env,
+        borrower: Address,
+        loan_id: BytesN<32>,
+        principal: i128,
+        escrow_origin: Option<Address>,
+    ) -> Result<(), PoolError> {
         if principal <= 0 {
             return Err(PoolError::InvalidAmount);
         }
@@ -337,7 +352,7 @@ impl LendingPoolContract {
             return Err(PoolError::LoanAlreadyExists);
         }
 
-        let config = Self::read_config(&env)?;
+        let config = Self::read_config(env)?;
 
         let loan = LoanRecord {
             borrower: borrower.clone(),
@@ -349,9 +364,10 @@ impl LendingPoolContract {
             created_ledger: env.ledger().sequence(),
             last_interest_ledger: env.ledger().sequence(),
             outstanding_debt: 0,
+            escrow_origin,
         };
 
-        Self::set_loan(&env, &loan_id, &loan);
+        Self::set_loan(env, &loan_id, &loan);
 
         // Increment loan count.
         let count: u32 = env
@@ -368,7 +384,7 @@ impl LendingPoolContract {
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
         env.events().publish(
-            (Symbol::new(&env, "loan_requested"),),
+            (Symbol::new(env, "loan_requested"),),
             (borrower, loan_id.clone(), principal),
         );
 
@@ -646,6 +662,8 @@ impl LendingPoolContract {
                     Self::set_tranche_info(&env, &Tranche::Junior, &ji);
                 }
             }
+        }
+
         let mut interest_paid = 0i128;
         if loan.repaid > loan.principal {
             let interest_start = if old_repaid > loan.principal {
@@ -749,6 +767,9 @@ impl LendingPoolContract {
 
         loan.status = LoanStatus::Defaulted;
         Self::set_loan(&env, &loan_id, &loan);
+        Ok(())
+    }
+
     /// Investor withdraws available capital.
     pub fn withdraw(env: Env, investor: Address, amount: i128) -> Result<(), PoolError> {
         Self::check_not_paused(&env)?;
@@ -916,6 +937,8 @@ impl LendingPoolContract {
     /// Returns the total junior liquidity in the pool.
     pub fn get_junior_liquidity(env: Env) -> i128 {
         Self::read_tranche_info(&env, &Tranche::Junior).total_deposited
+    }
+
     /// Returns repayment schedule for a loan (if one exists).
     pub fn get_repayment_schedule(env: Env, loan_id: BytesN<32>) -> Result<Option<RepaymentSchedule>, PoolError> {
         if env.storage().persistent().has(&DataKey::LoanSchedule(loan_id.clone())) {
@@ -975,7 +998,7 @@ impl LendingPoolContract {
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
         env.events().publish(
-            (symbol_short!("prop_admin"),),
+            (symbol_short!("prop_adm"),),
             (config.admin, new_admin),
         );
         Ok(())
@@ -998,7 +1021,7 @@ impl LendingPoolContract {
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
         env.events().publish(
-            (symbol_short!("accept_adm"),),
+            (symbol_short!("accept_pd"),),
             (pending,),
         );
         Ok(())
@@ -1467,6 +1490,8 @@ mod test {
 
         client.deposit(&senior_investor, &70_000_0000000i128, &Tranche::Senior);
         client.deposit(&junior_investor, &30_000_0000000i128, &Tranche::Junior);
+    }
+
     #[test]
     fn test_withdraw() {
         let env = Env::default();
@@ -1475,7 +1500,7 @@ mod test {
         let (_admin, investor, token_address, client) = setup_pool(&env);
         let token = token::Client::new(&env, &token_address);
 
-        client.deposit(&investor, &50_000_0000000i128);
+        client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
         
         // Investor withdraws 20,000
         client.withdraw(&investor, &20_000_0000000i128);
@@ -1496,7 +1521,7 @@ mod test {
         let borrower = Address::generate(&env);
         let loan_id = mock_loan_id(&env);
 
-        client.deposit(&investor, &50_000_0000000i128);
+        client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
         
         // Active loan commitment consumes 40,000 liquidity
         client.request_loan(&borrower, &loan_id, &40_000_0000000i128);
@@ -1605,28 +1630,6 @@ mod test {
         let ji = client.get_investor_info(&junior_investor);
         assert_eq!(ji.tranche, Tranche::Junior);
         assert_eq!(ji.deposited, 40_000_0000000i128);
-        // Investor 1 & 2 each deposit 50,000 (50% share)
-        client.deposit(&investor1, &50_000_0000000i128);
-        client.deposit(&investor2, &50_000_0000000i128);
-
-        client.request_loan(&borrower, &loan_id, &100_000_0000000i128);
-        client.approve_loan(&loan_id);
-        
-        sac.mint(&borrower, &110_000_0000000i128); // Fund borrower to repay
-        client.repay(&borrower, &loan_id, &108_000_0000000i128); // 100k principal + 8k interest
-
-        // Check pending yield (each should get 4k)
-        assert_eq!(client.get_pending_yield(&investor1), 4_000_0000000i128);
-        assert_eq!(client.get_pending_yield(&investor2), 4_000_0000000i128);
-
-        let bal1_before = token::Client::new(&env, &token_address).balance(&investor1);
-        client.claim_yield(&investor1);
-        let bal1_after = token::Client::new(&env, &token_address).balance(&investor1);
-        
-        assert_eq!(bal1_after - bal1_before, 4_000_0000000i128);
-        
-        let record = client.get_investor_info(&investor1);
-        assert_eq!(record.claimed_yield, 4_000_0000000i128);
     }
 
     #[test]
@@ -1638,7 +1641,7 @@ mod test {
         let borrower = Address::generate(&env);
         let loan_id = mock_loan_id(&env);
 
-        client.deposit(&investor, &100_000_0000000i128);
+        client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
 
@@ -1663,7 +1666,7 @@ mod test {
         let borrower = Address::generate(&env);
         let loan_id = mock_loan_id(&env);
 
-        client.deposit(&investor, &100_000_0000000i128);
+        client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
 
@@ -1776,9 +1779,9 @@ mod test {
         let (_admin, investor, _token_address, client) = setup_pool(&env);
 
         // Investor deposits into the pool.
-        client.deposit(&investor, &50_000_0000000i128);
+        client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
         assert_eq!(client.get_liquidity(), 50_000_0000000i128);
-
+        
         // Propose an upgrade (timelock path).
         client.set_upgrade_delay(&300u32);
         let dummy_hash = BytesN::from_array(&env, &[8u8; 32]);

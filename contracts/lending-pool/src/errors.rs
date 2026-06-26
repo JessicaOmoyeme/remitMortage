@@ -29,9 +29,9 @@ pub enum PoolError {
     /// Upgrade was proposed but the timelock delay has not elapsed yet.
     UpgradeTimelockActive = 12,
     /// Investor cannot change tranche after the initial deposit.
-    TrancheMismatch = 11,
+    TrancheMismatch = 15,
     /// Junior tranche has insufficient capital to absorb this loss.
-    InsufficientJuniorCapital = 12,
+    InsufficientJuniorCapital = 16,
     /// Operation rejected because the contract is paused.
     ContractPaused = 13,
     /// Proposed new admin is not the caller or no transfer is pending.
